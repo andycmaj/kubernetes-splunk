@@ -1,0 +1,130 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: indexer-lb
+  labels:
+    app: splunk
+    role: indexer
+spec:
+  type: LoadBalancer
+  selector:
+    app: splunk
+    role: indexer
+  ports:
+    # the port that this service should serve on
+  - name: http
+    port: 80
+    targetPort: 8088
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: indexer
+  labels:
+    app: splunk
+    role: indexer
+spec:
+  clusterIP: None
+  # if your cluster supports it, uncomment the following to automatically create
+  # an external load-balanced IP for the frontend service.
+  ports:
+  - name: mgmt
+    port: 8089
+    targetPort: 8089
+  - name: indexing
+    port: 9997
+    targetPort: 9997
+  - name: replication
+    port: 9888
+    targetPort: 9888
+  selector:
+    app: splunk
+    role: indexer
+---
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: indexer
+  # these labels can be applied automatically
+  # from the labels in the pod template if not set
+  # labels:
+  #   app: redis
+  #   role: master
+  #   tier: backend
+spec:
+  # this replicas value is default
+  # modify it according to your case
+  replicas: 3
+  serviceName: indexer
+  # from the labels in the pod template if not set
+  # selector:
+  #   matchLabels:
+  #     app: guestbook
+  #     role: master
+  #     tier: backend
+  template:
+    metadata:
+      labels:
+        app: splunk
+        role: indexer
+      # annotations:
+      #   pod.beta.kubernetes.io/init-containers: '[
+      #     {
+      #       "name": "wait-for-endpoints",
+      #       "image": "giantswarm/tiny-tools",
+      #       "command": ["fish", "-c", "echo \"waiting for endpoints...\"; while true; set endpoints (curl -s --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt --header \"Authorization: Bearer \"(cat /var/run/secrets/kubernetes.io/serviceaccount/token) https://kubernetes.default.svc/api/v1/namespaces/monitoring/endpoints/grafana); echo $endpoints | jq \".\"; if test (echo $endpoints | jq -r \".subsets[].addresses | length\") -gt 0; exit 0; end; echo \"waiting...\";sleep 1; end"],
+      #       "args": ["monitoring", "grafana"]
+      #     }
+      #   ]'
+    spec:
+      volumes:
+        - name: boot-config
+          configMap:
+            name: indexer-boot-config
+            items:
+              - key: indexer.conf
+                path: indexer.conf
+      containers:
+        - name: indexer
+          image: andycunn/splunk-kube
+          # image: gcr.io/google_containers/explorer:1.0
+          # args: ["-port=8088"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          ports:
+            - containerPort: 8088
+            - containerPort: 8089
+            - containerPort: 9997
+            - containerPort: 9888
+          volumeMounts:
+            - mountPath: /tmp
+              name: boot-config
+          env:
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: SPLUNK_BEFORE_START_CMD_1
+              value: "version $SPLUNK_START_ARGS"
+            - name: SPLUNK_BEFORE_START_CMD_2
+              value: "cmd python /opt/splunk/bin/splunk_setup.py --wait-splunk 'https://master:8089' cluster_master"
+            - name: SPLUNK_BEFORE_START_CMD_3
+              value: "cmd python /opt/splunk/bin/splunk_setup.py --configure '/tmp/indexer.conf'"
+            - name: SPLUNK_CMD_1
+              value: "status"
+            - name: SPLUNK_HEALTHCHECK_HEC
+              value: "http://127.0.0.1:8088"
+            - name: SPLUNK_HEALTHCHECK_SPLUNKD
+              value: "https://127.0.0.1:8089"
+            - name: SPLUNK_START_ARGS
+              value: "--accept-license --answer-yes --no-prompt"

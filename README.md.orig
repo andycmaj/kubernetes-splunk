@@ -1,3 +1,7 @@
+<<<<<<< 0db8d79d1d2e2f5dea7680f1d7bc0f8a7f000504
+# kubernetes-splunk
+Splunk Deployed as a Kubernetes Application
+=======
 # Architecture
 
 ## Pods
@@ -34,3 +38,4 @@ kc create configmap indexer-boot-config --from-file=indexer.conf
 ```
 kc create configmap indexer-boot-config --from-file=indexer.conf --dry-run -o yaml | kc replace configmap indexer-boot-config -f -
 ```
+>>>>>>> initial commit. baseline structure with configurable indexer replicas connected to a single master pod

@@ -1,0 +1,116 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: master
+  labels:
+    app: splunk
+    tier: frontend
+spec:
+  # if your cluster supports it, uncomment the following to automatically create
+  # an external load-balanced IP for the frontend service.
+  type: LoadBalancer
+  ports:
+    # the port that this service should serve on
+  - name: http
+    port: 80
+    targetPort: 8000
+  - name: mgmt
+    port: 8089
+    targetPort: 8089
+  - name: kv
+    port: 8191
+    targetPort: 8191
+  selector:
+    app: splunk
+    tier: frontend
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: master
+  # these labels can be applied automatically
+  # from the labels in the pod template if not set
+  # labels:
+  #   app: redis
+  #   role: master
+  #   tier: backend
+spec:
+  # this replicas value is default
+  # modify it according to your case
+  replicas: 1
+  # selector can be applied automatically
+  # from the labels in the pod template if not set
+  # selector:
+  #   matchLabels:
+  #     app: guestbook
+  #     role: master
+  #     tier: backend
+  template:
+    metadata:
+      labels:
+        app: splunk
+        role: master
+        tier: frontend
+    spec:
+      volumes:
+        - name: boot-config
+          configMap:
+            name: master-boot-config
+            items:
+              - key: master.conf
+                path: master.conf
+      containers:
+        - name: master
+          image: andycunn/splunk-kube:latest
+          env:
+            - name: CONFIG_RESTORE_PARENT
+              value: "/tmp"
+            - name: SPLUNK_ADD_1
+              value: "role service_discovery_role -auth admin:changeme"
+            - name: SPLUNK_ADD_2
+              value: "user service_discovery_user -password service_discovery_password -role service_discovery_role -auth admin:changeme"
+            - name: SPLUNK_BEFORE_START_CMD_1
+              value: "version $SPLUNK_START_ARGS"
+            - name: SPLUNK_BEFORE_START_CMD_2
+              value: "cmd python /opt/splunk/bin/splunk_setup.py --restore-config"
+            - name: SPLUNK_BEFORE_START_CMD_3
+              value: "cmd python /opt/splunk/bin/splunk_setup.py --configure '/tmp/master.conf'"
+            - name: SPLUNK_CMD_7
+              value: "status"
+            - name: SPLUNK_ENABLE_DEPLOY_SERVER
+              value: "true"
+            - name: SPLUNK_HEALTHCHECK_SPLUNKD
+              value: "https://127.0.0.1:8089"
+            - name: SPLUNK_HEALTHCHECK_SPLUNKWEB
+              value: "http://127.0.0.1:8000"
+            - name: SPLUNK_START_ARGS
+              value: "--accept-license --answer-yes --no-prompt"
+            - name: CONFIG_RESTORE_PARENT
+              value: "/tmp"
+            - name: REPO_ZIP_FILENAME
+              value: "splunk-configuration-development-latest"
+            - name: REPO_ZIP_URL_FORMAT
+              value: "https://s3-us-west-2.amazonaws.com/ac-splunk-config/{}.zip"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /en-US/account/login
+              port: web
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 20
+          ports:
+            - name: web
+              containerPort: 8000
+            - name: mgmt
+              containerPort: 8089
+            - name: kv
+              containerPort: 8191
+            - name: indexing
+              containerPort: 9997
+          volumeMounts:
+            - mountPath: /tmp
+              name: boot-config

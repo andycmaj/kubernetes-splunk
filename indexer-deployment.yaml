@@ -1,81 +1,25 @@
-apiVersion: v1
-kind: Service
-metadata:
-  name: indexer-lb
-  labels:
-    app: splunk
-    role: indexer
-spec:
-  type: LoadBalancer
-  selector:
-    app: splunk
-    role: indexer
-  ports:
-    # the port that this service should serve on
-  - name: http
-    port: 80
-    targetPort: 8088
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: indexer
-  labels:
-    app: splunk
-    role: indexer
-spec:
-  clusterIP: None
-  # if your cluster supports it, uncomment the following to automatically create
-  # an external load-balanced IP for the frontend service.
-  ports:
-  - name: mgmt
-    port: 8089
-    targetPort: 8089
-  - name: indexing
-    port: 9997
-    targetPort: 9997
-  - name: replication
-    port: 9888
-    targetPort: 9888
-  selector:
-    app: splunk
-    role: indexer
----
 apiVersion: apps/v1beta1
 kind: StatefulSet
 metadata:
   name: indexer
-  # these labels can be applied automatically
-  # from the labels in the pod template if not set
-  # labels:
-  #   app: redis
-  #   role: master
-  #   tier: backend
 spec:
-  # this replicas value is default
-  # modify it according to your case
   replicas: 3
   serviceName: indexer
-  # from the labels in the pod template if not set
-  # selector:
-  #   matchLabels:
-  #     app: guestbook
-  #     role: master
-  #     tier: backend
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      annotations:
+        volume.alpha.kubernetes.io/storage-class: anything
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 10Gi
   template:
     metadata:
       labels:
         app: splunk
         role: indexer
-      # annotations:
-      #   pod.beta.kubernetes.io/init-containers: '[
-      #     {
-      #       "name": "wait-for-endpoints",
-      #       "image": "giantswarm/tiny-tools",
-      #       "command": ["fish", "-c", "echo \"waiting for endpoints...\"; while true; set endpoints (curl -s --cacert /var/run/secrets/kubernetes.io/serviceaccount/ca.crt --header \"Authorization: Bearer \"(cat /var/run/secrets/kubernetes.io/serviceaccount/token) https://kubernetes.default.svc/api/v1/namespaces/monitoring/endpoints/grafana); echo $endpoints | jq \".\"; if test (echo $endpoints | jq -r \".subsets[].addresses | length\") -gt 0; exit 0; end; echo \"waiting...\";sleep 1; end"],
-      #       "args": ["monitoring", "grafana"]
-      #     }
-      #   ]'
     spec:
       volumes:
         - name: boot-config
@@ -99,8 +43,10 @@ spec:
             - containerPort: 9997
             - containerPort: 9888
           volumeMounts:
-            - mountPath: /tmp
-              name: boot-config
+            - name: boot-config
+              mountPath: /tmp
+            - name: data
+              mountPath: /opt/splunk/var
           env:
             - name: MY_POD_NAME
               valueFrom:

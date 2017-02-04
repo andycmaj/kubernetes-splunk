@@ -1,50 +1,9 @@
-apiVersion: v1
-kind: Service
-metadata:
-  name: master
-  labels:
-    app: splunk
-    tier: frontend
-spec:
-  # if your cluster supports it, uncomment the following to automatically create
-  # an external load-balanced IP for the frontend service.
-  type: LoadBalancer
-  ports:
-    # the port that this service should serve on
-  - name: http
-    port: 80
-    targetPort: 8000
-  - name: mgmt
-    port: 8089
-    targetPort: 8089
-  - name: kv
-    port: 8191
-    targetPort: 8191
-  selector:
-    app: splunk
-    tier: frontend
----
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   name: master
-  # these labels can be applied automatically
-  # from the labels in the pod template if not set
-  # labels:
-  #   app: redis
-  #   role: master
-  #   tier: backend
 spec:
-  # this replicas value is default
-  # modify it according to your case
   replicas: 1
-  # selector can be applied automatically
-  # from the labels in the pod template if not set
-  # selector:
-  #   matchLabels:
-  #     app: guestbook
-  #     role: master
-  #     tier: backend
   template:
     metadata:
       labels:
@@ -53,6 +12,14 @@ spec:
         tier: frontend
     spec:
       volumes:
+        - name: secret-volume
+          secret:
+           secretName: credentials
+        - name: data
+          hostPath:
+            path: /vol/splunk/data
+        - name: config
+          emptyDir: {}
         - name: boot-config
           configMap:
             name: master-boot-config
@@ -88,9 +55,9 @@ spec:
             - name: CONFIG_RESTORE_PARENT
               value: "/tmp"
             - name: REPO_ZIP_FILENAME
-              value: "splunk-configuration-development-latest"
+              value: "splunk-configuration-latest"
             - name: REPO_ZIP_URL_FORMAT
-              value: "https://s3-us-west-2.amazonaws.com/ac-splunk-config/{}.zip"
+              value: "https://s3-us-west-2.amazonaws.com/splunk-kubernetes/{}.zip"
           resources:
             requests:
               cpu: 100m
@@ -112,5 +79,21 @@ spec:
             - name: indexing
               containerPort: 9997
           volumeMounts:
-            - mountPath: /tmp
-              name: boot-config
+            - name: data
+              mountPath: /opt/splunk/var
+            - name: config
+              mountPath: /opt/splunk/etc
+            - name: boot-config
+              mountPath: /tmp
+        - name: config-backup
+          image: andycunn/splunk-config-backup
+          volumeMounts:
+            - name: secret-volume
+              mountPath: /root/.aws
+            - name: config
+              mountPath: /opt/splunk/etc
+          env:
+            - name: SPLUNK_CONFIG_PATH
+              value: /opt/splunk/etc
+            - name: CONFIG_BACKUP_S3_BUCKET
+              value: splunk-kubernetes

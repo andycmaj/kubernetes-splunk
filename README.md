@@ -23,14 +23,31 @@
 
 # OPS
 
-## Creating ConfigMaps
+## ConfigMaps
+
+### Create
 
 ```
 kc create configmap indexer-boot-config --from-file=indexer.conf
 ```
 
-## Updating ConfigMaps
+### Update
 
 ```
 kc create configmap indexer-boot-config --from-file=indexer.conf --dry-run -o yaml | kc replace configmap indexer-boot-config -f -
+```
+
+## Secrets
+
+### Create
+
+```
+# AWS Credentials
+kc create secret generic credentials --from-file=./credentials
+```
+
+### Update
+```
+# AWS Credentials
+kc create secret generic credentials --from-file=credentials --dry-run -o yaml | kc replace secret credentials -f -
 ```

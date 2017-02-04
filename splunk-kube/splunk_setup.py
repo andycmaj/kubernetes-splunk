@@ -105,7 +105,7 @@ def restore_config():
         archive.extractall(dest_dir)
         archive.close()
         print "extracted zip to {}".format(dest_dir)
-        restore_from = os.path.join(dest_dir, 'etc')
+        restore_from = os.path.join(dest_dir, 'opt/backup/etc')
         print "copying from {}".format(restore_from)
         subprocess.call("cp -rf {} {}".format(restore_from, '/opt/splunk'), shell=True)
         print "Restored config to {}".format(dest_dir)

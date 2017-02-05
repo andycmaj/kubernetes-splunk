@@ -1,3 +1,28 @@
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: scripts-pv
+  labels:
+    type: local
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/vol/splunk/scripts"
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: scripts-pv-claim
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
@@ -12,14 +37,21 @@ spec:
         tier: frontend
     spec:
       volumes:
+        # AWS Credentials for pushing config backups to s3
         - name: secret-volume
           secret:
            secretName: credentials
+        # Splunk Data
         - name: data
           hostPath:
             path: /vol/splunk/data
+        # Splunk Config. Shared with config-backup container
         - name: config
           emptyDir: {}
+        - name: scripts
+          persistentVolumeClaim:
+           claimName: scripts-pv-claim
+        # Master bootstrap config. see master.conf
         - name: boot-config
           configMap:
             name: master-boot-config
@@ -30,8 +62,6 @@ spec:
         - name: master
           image: andycunn/splunk-kube:latest
           env:
-            - name: CONFIG_RESTORE_PARENT
-              value: "/tmp"
             - name: SPLUNK_ADD_1
               value: "role service_discovery_role -auth admin:changeme"
             - name: SPLUNK_ADD_2
@@ -52,6 +82,8 @@ spec:
               value: "http://127.0.0.1:8000"
             - name: SPLUNK_START_ARGS
               value: "--accept-license --answer-yes --no-prompt"
+            - name: SPLUNK_ENABLE_DEPLOY_SERVER
+              value: "true"
             - name: CONFIG_RESTORE_PARENT
               value: "/tmp"
             - name: REPO_ZIP_FILENAME
@@ -83,6 +115,8 @@ spec:
               mountPath: /opt/splunk/var
             - name: config
               mountPath: /opt/splunk/etc
+            - name: scripts
+              mountPath: /opt/splunk/bin/scripts
             - name: boot-config
               mountPath: /tmp
         - name: config-backup

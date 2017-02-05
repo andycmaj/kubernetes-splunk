@@ -8,7 +8,7 @@
 
 - Indexer (StatefulSet)
     - splunk-indexer
-    - index-backup
+    - **TODO** index-backup
 
 ## Services
 
